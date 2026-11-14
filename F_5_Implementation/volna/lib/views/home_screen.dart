@@ -1,0 +1,228 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../controllers/app_controller.dart';
+import '../models/media.dart';
+import 'player_screen.dart';
+import 'track_tile.dart';
+import 'folder_tracks_screen.dart';
+import 'l10n/strings.dart';
+import 'settings_screen.dart';
+
+/// Main navigation shell; observes Models and delegates commands to Controllers.
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key, required this.app});
+  final AppController app;
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  int _tab = 0;
+  AppController get app => widget.app;
+  @override
+  // Flutter lifecycle method: register this screen's observer once, not during build.
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(app.initialize());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Native audio continues playing when this screen is not visible.
+    if (state == AppLifecycleState.paused) unawaited(app.savePlayback());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // The audio player belongs to the app/service, not this individual route.
+    super.dispose();
+  }
+
+  // Private helper method: leading underscore limits access to this Dart library.
+  Widget _topTracks() {
+    final tracks = app.model.library.topTracks;
+    if (tracks.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.leaderboard_outlined,
+                size: 44,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                context.l10n.noListeningHistory,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return TrackList(
+      app: app,
+      tracks: tracks,
+      trailing: (context, track) => Text(
+        '${app.model.library.playCount(track.id)}',
+        style: TextStyle(color: Theme.of(context).colorScheme.primary),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: app.model.library,
+    builder: (context, _) => Scaffold(
+      appBar: AppBar(
+        title: Text(
+          [
+            context.l10n.top100,
+            context.l10n.playlists,
+            context.l10n.radio,
+            context.l10n.settings,
+          ][_tab],
+        ),
+        actions: [
+          if (_tab == 1) ...[
+            IconButton(
+              tooltip: context.l10n.addFolder,
+              onPressed:
+                  app.model.library.busy || !app.model.library.supportsFolders
+                  ? null
+                  : () => unawaited(app.library.addFolder()),
+              icon: const Icon(Icons.add_rounded),
+            ),
+            if (app.model.library.supportsFolders)
+              IconButton(
+                tooltip: context.l10n.refreshLibrary,
+                onPressed: app.model.library.busy
+                    ? null
+                    : () => unawaited(app.library.refresh()),
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+          ],
+          SizedBox(width: 8),
+        ],
+      ),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            if (app.model.library.busy)
+              const LinearProgressIndicator(minHeight: 2),
+            if (app.model.library.error != null)
+              ErrorBanner(
+                message: app.model.library.error!,
+                onDismiss: app.library.clearError,
+              ),
+            ListenableBuilder(
+              listenable: app.model.playback,
+              builder: (context, _) => app.model.playback.error == null
+                  ? const SizedBox.shrink()
+                  : ErrorBanner(
+                      message: app.model.playback.error!,
+                      onDismiss: app.playback.clearError,
+                    ),
+            ),
+            Expanded(
+              child: switch (_tab) {
+                0 => _topTracks(),
+                1 => _playlists(),
+                2 => _radio(),
+                _ => SettingsScreen(controller: app.settings),
+              },
+            ),
+            MiniPlayer(app: app),
+          ],
+        ),
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: (value) => setState(() => _tab = value),
+        destinations: [
+          NavigationDestination(
+            icon: Icon(Icons.leaderboard_outlined),
+            selectedIcon: Icon(Icons.leaderboard),
+            label: context.l10n.top100,
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.queue_music),
+            label: context.l10n.playlists,
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.radio_outlined),
+            selectedIcon: Icon(Icons.radio),
+            label: context.l10n.radio,
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: context.l10n.settings,
+          ),
+        ],
+      ),
+    ),
+  );
+
+  // Folder-style entries expose selected document trees without copying audio.
+  Widget _playlists() => ListView(
+    children: [
+      for (final folder in app.model.library.folders) _folderTile(folder),
+      if (app.model.library.folders.isEmpty &&
+          app.model.library.supportsFolders)
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              const SizedBox(height: 32),
+              FilledButton.icon(
+                onPressed: app.model.library.busy
+                    ? null
+                    : () => unawaited(app.library.addFolder()),
+                icon: const Icon(Icons.create_new_folder_outlined),
+                label: Text(context.l10n.addFolder),
+              ),
+            ],
+          ),
+        ),
+    ],
+  );
+
+  Widget _folderTile(MusicFolder folder) => ListTile(
+    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+    leading: const Icon(Icons.folder, color: Color(0xFFFFB900), size: 44),
+    title: Text(folder.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+    subtitle: Text(
+      context.l10n.trackCount(
+        app.model.library.tracksForFolder(folder.uri).length,
+      ),
+    ),
+    trailing: PopupMenuButton<String>(
+      tooltip: context.l10n.musicFolders,
+      onSelected: (_) => unawaited(app.library.removeFolder(folder.uri)),
+      itemBuilder: (_) => [
+        PopupMenuItem(value: 'remove', child: Text(context.l10n.removeFolder)),
+      ],
+    ),
+    onTap: () => Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => FolderTracksScreen(
+          app: app,
+          title: folder.name,
+          tracks: () => app.model.library.tracksForFolder(folder.uri),
+        ),
+      ),
+    ),
+  );
+  Widget _radio() => TrackList(app: app, tracks: app.model.library.stations);
+}
+
