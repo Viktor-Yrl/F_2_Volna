@@ -62,6 +62,6 @@ Detailed radio attribution remains in
 ## Status
 
 Latest recorded verification: **92 automated tests passed; Flutter analysis clean**.
-Current-source physical-phone acceptance remains pending. Radio availability
-depends on broadcasters and networks. This project is not certified ready for Google Play.
+The application has been tested on a physical phone. Radio availability
+depends on broadcasters and networks.
 
