@@ -8,6 +8,7 @@ import 'models/services/audio_bootstrap.dart';
 import 'models/services/library_store.dart';
 import 'views/app_view.dart';
 
+
 // Entry-point function: Flutter starts here; its name must remain main.
 // async allows startup to await platform setup before displaying widgets.
 Future<void> main() async {
