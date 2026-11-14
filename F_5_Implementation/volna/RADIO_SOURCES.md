@@ -1,6 +1,6 @@
 # Built-in Radio Catalog
 
-Catalog: `lib/data/radio_catalog.dart`. Expanded 2026-11-06 to 12 stations.
+Catalog: `lib/models/radio_catalog.dart`. Expanded 2026-11-06 to 12 stations.
 English-language stations precede Russian-language stations. The original five
 entries below retain their 2026-11-01 verification results, not a new playback claim.
 
